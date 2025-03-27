@@ -17,21 +17,18 @@ from tqdm import tqdm  # 添加 tqdm 库
 
 # 定义超参数
 batch_size = 128
-learning_rate = 0.001
-num_epochs = 100
+learning_rate = 0.002
+num_epochs = 200
 dprate = 0.5
 
-# 定义数据预处理方式
-# 普通的数据预处理方式
-# transform = transforms.Compose([
-#     transforms.ToTensor(),])
-# 数据增强的数据预处理方式
+# 改进数据增强的数据预处理方式
 transform = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),  # 随机裁剪
-    transforms.RandomHorizontalFlip(),    # 随机水平翻转
-    transforms.RandomRotation(15),        # 随机旋转
-    transforms.ToTensor(),                # 转为张量
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))  # 归一化
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(15),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # 添加随机颜色抖动
+    transforms.ToTensor(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 ])
 
 # 定义数据集
@@ -42,36 +39,39 @@ test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-# 定义模型
+# 改进模型结构
 class Net(nn.Module):
     '''
-    定义卷积神经网络,3个卷积层,2个全连接层
+    改进后的卷积神经网络，增加卷积层和批归一化
     '''
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=5, stride=1, padding=2)
-        self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, stride=1, padding=2)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
+        self.bn4 = nn.BatchNorm2d(256)
         self.fc1 = nn.Linear(256 * 8 * 8, 512)
-        self.fc2 = nn.Linear(512, 512)
-        self.fc3 = nn.Linear(512, 512)
-        self.fc4 = nn.Linear(512, 10)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 10)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.avg_pool2d(x, kernel_size=2, stride=2)
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.bn4(self.conv4(x)))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = x.view(-1, 256 * 8 * 8)
         x = F.relu(self.fc1(x))
         x = F.dropout(x, dprate)
         x = F.relu(self.fc2(x))
         x = F.dropout(x, dprate)
-        x = F.relu(self.fc3(x))
-        x = F.dropout(x, dprate)
-        x = self.fc4(x)
+        x = self.fc3(x)
         return x
-        
 
 # 实例化模型
 model = Net()
@@ -96,6 +96,9 @@ model = model.to(device)
 # 定义损失函数和优化器
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+# 使用学习率调度器
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.5)  # 每30个epoch学习率减半
 
 # 训练模型
 for epoch in range(num_epochs):
@@ -123,6 +126,8 @@ for epoch in range(num_epochs):
 
         # 更新进度条信息
         train_pbar.set_postfix({"Loss": loss.item(), "Accuracy": f"{accuracy * 100:.2f}%"})
+
+    scheduler.step()  # 更新学习率
 
     # 测试模式
     model.eval()
