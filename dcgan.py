@@ -24,7 +24,6 @@ flags = {
 }
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = torch.device("cpu")
 print("Using device: ", device)
 # 创建目录
 os.makedirs(flags["checkpoint_dir"], exist_ok=True)
@@ -112,8 +111,8 @@ D = Discriminator().to(device)
 d_optimizer = optim.Adam(D.parameters(), lr=flags["lr"], betas=(flags["beta1"], 0.999))
 g_optimizer = optim.Adam(G.parameters(), lr=flags["lr"], betas=(flags["beta1"], 0.999))
 
-# 损失函数: TODO
-pass
+# 损失函数:
+criterion = nn.BCELoss() # 二进制交叉熵损失函数
 
 # 固定噪声用于生成样本
 fixed_z = torch.randn(flags["sample_size"], flags["z_dim"], device=device)
@@ -168,23 +167,21 @@ def train():
             #    a. 真实图片通过判别器D，得到真实图片的判别结果，记为D(x)
             #    b. 生成图片通过判别器D，得到生成图片的判别结果，记为D(G(z))
             #    c. 计算判别器D的损失，使其能够区分真实图片和生成图片：loss = -log(D(x)) - log(1-D(G(z)))
+            
             #    d. 计算判别器D的梯度，更新判别器D的参数
+            d_loss = criterion(D(real_images), torch.ones(batch_size, device=device)) + \
+                    criterion(D(G(torch.randn(batch_size, flags["z_dim"], device=device))), torch.zeros(batch_size, device=device))
+            d_optimizer.zero_grad()
+            d_loss.backward()
+            d_optimizer.step()
             # 2. 训练生成器G，使其能够生成更逼真的图片：
             #    a. 随机生成噪声z，通过生成器G，得到生成图片G(z)
             #    b. 计算生成器G的损失，使其能够生成更逼真的图片：loss = -log(D(G(z)))
             #    c. 计算生成器G的梯度，更新生成器G的参数
-
-
-            # 判别器的损失: TODO
-            pass
-            # 判别器梯度更新: TODO
-            pass
-
-
-            # 生成器的损失: TODO
-            pass
-            # 生成器梯度更新: TODO
-            pass    
+            g_loss = criterion(D(G(torch.randn(batch_size, flags["z_dim"], device=device))), torch.ones(batch_size, device=device))
+            g_optimizer.zero_grad()
+            g_loss.backward()
+            g_optimizer.step()
 
 
             # 记录损失
@@ -198,7 +195,7 @@ def train():
                 plot_loss(losses)
 
                 # 打印进度信息
-                print(f"[Epoch {epoch}/{flags['n_epoch']}] "
+                print(f"[Epoch {epoch + 1}/{flags['n_epoch']}] "
                       f"[Batch {i}/{len(train_loader)}] "
                       f"D_loss: {d_loss.item():.4f} G_loss: {g_loss.item():.4f}")
 
@@ -213,3 +210,4 @@ def train():
 
 if __name__ == "__main__":
     train()
+    
