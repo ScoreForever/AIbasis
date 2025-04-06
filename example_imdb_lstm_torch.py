@@ -3,7 +3,7 @@ import os
 
 import torch
 from torch.nn import Module
-from torch.nn import Linear, LSTM, Embedding
+from torch.nn import Linear, LSTM, Embedding, RNN, GRU
 from torch.utils.data import Dataset, DataLoader
 from torch.optim.lr_scheduler import StepLR
 import numpy as np
@@ -65,7 +65,8 @@ class ImdbNet(Module):
     def __init__(self):
         super(ImdbNet, self).__init__()
         self.embedding = Embedding(num_embeddings=vocab_size, embedding_dim=64)
-        self.lstm = LSTM(input_size=64, hidden_size=64)
+        # self.lstm = LSTM(input_size=64, hidden_size=64)
+        self.rnn = RNN(input_size=64, hidden_size=64, num_layers=num_of_layers, batch_first=True)
         self.linear1 = Linear(in_features=64, out_features=64)
         self.act1 = torch.nn.ReLU()
         self.linear2 = Linear(in_features=64, out_features=2)
@@ -73,11 +74,12 @@ class ImdbNet(Module):
     def forward(self, x):
         batch_size_in_forward = x.shape[0]
         prev_h = torch.zeros(num_of_layers, batch_size_in_forward, hidden_size).to(device)  #(num_layers, batch_size, hidden_size)
-        prev_c = torch.zeros(num_of_layers, batch_size_in_forward, hidden_size).to(device)  #(num_layers, batch_size, hidden_size)
+        # prev_c = torch.zeros(num_of_layers, batch_size_in_forward, hidden_size).to(device)  #(num_layers, batch_size, hidden_size)
         x = self.embedding(x)
-        x = x.permute(1, 0, 2)  # x经过permute将变成 (seq_len, batch_size, input_size), 便于适应LSTM输入
-        x, _ = self.lstm(x, [prev_h, prev_c])
-        x = torch.mean(x, dim=0)  # 对seq_len维度求均值，得到一个batch_size个、长为hidden_size的向量作为输出
+        # x = x.permute(1, 0, 2)  # x经过permute将变成 (seq_len, batch_size, input_size), 便于适应LSTM输入
+        # x, _ = self.lstm(x, [prev_h, prev_c])
+        x, _ = self.rnn(x, prev_h) 
+        x = torch.mean(x, dim=1)  # 对seq_len维度求均值，得到一个batch_size个、长为hidden_size的向量作为输出
         x = self.linear1(x)
         x = self.act1(x)
         x = self.linear2(x)
