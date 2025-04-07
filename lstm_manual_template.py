@@ -109,7 +109,7 @@ class Net(nn.Module):
         # 词嵌入层
         self.embedding = nn.Embedding(vocab_size, embedding_size)
         # LSTM层
-        self.lstm = LSTM(input_size=hidden_size, hidden_size=hidden_size)
+        self.lstm = LSTM(input_size=embedding_size, hidden_size=hidden_size)
         # 全连接层
         self.fc1 = nn.Linear(hidden_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, num_classes)
