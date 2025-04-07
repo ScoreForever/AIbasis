@@ -66,6 +66,35 @@ class LSTM(nn.Module):
         self.hidden_size = hidden_size
 
         # LSTM层
+        # 单层LSTM
+        self.Wii = nn.Linear(input_size, hidden_size, bias=True) # 输入门
+        self.Wif = nn.Linear(input_size, hidden_size, bias=True) # 遗忘门
+        self.Wig = nn.Linear(input_size, hidden_size, bias=True) # 候选记忆单元
+        self.Wio = nn.Linear(input_size, hidden_size, bias=True) # 输出门
+        self.Whi = nn.Linear(hidden_size, hidden_size, bias=True) # 隐藏状态输入门
+        self.Whf = nn.Linear(hidden_size, hidden_size, bias=True) # 隐藏状态遗忘门
+        self.Whg = nn.Linear(hidden_size, hidden_size, bias=True) # 隐藏状态候选记忆单元
+        self.Who = nn.Linear(hidden_size, hidden_size, bias=True) # 隐藏状态输出门
+
+    def forward(self, x, h_prev, c_prev):
+        '''
+        x: 输入, shape: (batch_size, seq_len, input_size)
+        h_prev: 上一时刻的隐藏状态, shape: (batch_size, hidden_size)
+        c_prev: 上一时刻的细胞状态, shape: (batch_size, hidden_size)
+        '''
+        outputs = []  # 用于存储每个时间步的隐藏状态
+        for t in range(x.size(1)):  # 遍历序列长度
+            x_t = x[:, t, :]  # 当前时间步的输入 (batch_size, input_size)
+            i_t = torch.sigmoid(self.Wii(x_t) + self.Whi(h_prev))
+            f_t = torch.sigmoid(self.Wif(x_t) + self.Whf(h_prev))
+            g_t = torch.tanh(self.Wig(x_t) + self.Whg(h_prev))
+            o_t = torch.sigmoid(self.Wio(x_t) + self.Who(h_prev))
+            c_prev = f_t * c_prev + i_t * g_t  # 更新细胞状态
+            h_prev = o_t * torch.tanh(c_prev)  # 更新隐藏状态
+            outputs.append(h_prev.unsqueeze(1))  # 添加当前时间步的隐藏状态
+
+        outputs = torch.cat(outputs, dim=1)  # 拼接所有时间步的隐藏状态 (batch_size, seq_len, hidden_size)
+        return outputs, h_prev, c_prev  # 返回所有时间步的隐藏状态、最后一个隐藏状态和细胞状态
 
 
 # 你需要实现网络推理和训练内容，仅需要完善forward函数
@@ -91,8 +120,20 @@ class Net(nn.Module):
         '''
 
         # 词嵌入
-        x = self.embedding(x)
-        # LSTM层
+        x = self.embedding(x)  # (batch_size, seq_len, embedding_size)
+        
+        # 初始化隐藏状态和细胞状态
+        batch_size_in_forward = x.shape[0]
+        h_prev = torch.zeros(batch_size_in_forward, self.lstm.hidden_size).to(device)  # (batch_size, hidden_size)
+        c_prev = torch.zeros(batch_size_in_forward, self.lstm.hidden_size).to(device)  # (batch_size, hidden_size)
+        
+        # LSTM层逐时间步计算
+        outputs, h_prev, c_prev = self.lstm(x, h_prev, c_prev)
+        
+        # 全连接层
+        x = torch.relu(self.fc1(h_prev))  # 使用最后一个时间步的隐藏状态
+        x = torch.softmax(self.fc2(x), dim=1)
+        return x
 
 
 n_epoch = 5
